@@ -85,6 +85,13 @@ def render():
         tgt_label = st.selectbox("Langue cible", TRANSLATE_LANGS, key="live_trad_lang")
         translate_to_lang = LANG_CODE.get(tgt_label)
 
+    # Format d'export
+    st.markdown("**Format d'export**")
+    col_f1, col_f2, col_f3 = st.columns(3)
+    export_txt = col_f1.checkbox(".txt", value=True,  key="live_export_txt")
+    export_md  = col_f2.checkbox(".md",  value=False, key="live_export_md")
+    export_srt = col_f3.checkbox(".srt", value=False, key="live_export_srt")
+
     # Contrôles Start / Stop
     col_start, col_stop, col_status = st.columns([1, 1, 2])
     with col_start:
@@ -125,10 +132,15 @@ def render():
     transcript_area = st.empty()
     _render_live_transcript(transcript_area)
 
-    # Export après arrêt
+    # Export après arrêt (utilise les formats choisis avant le démarrage)
     if not st.session_state["live_running"] and st.session_state["live_segments"]:
         st.divider()
-        _export_section(st.session_state["live_segments"])
+        _export_section(
+            st.session_state["live_segments"],
+            export_txt=st.session_state.get("live_export_txt", True),
+            export_md=st.session_state.get("live_export_md", False),
+            export_srt=st.session_state.get("live_export_srt", False),
+        )
 
     # Auto-refresh pendant l'enregistrement
     if st.session_state["live_running"]:

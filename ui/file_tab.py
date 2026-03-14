@@ -54,6 +54,13 @@ def render():
         else:
             translate_to_lang = target_label
 
+    # Format d'export
+    st.markdown("**Format d'export**")
+    col_f1, col_f2, col_f3 = st.columns(3)
+    export_txt = col_f1.checkbox(".txt", value=True,  key="file_export_txt")
+    export_md  = col_f2.checkbox(".md",  value=False, key="file_export_md")
+    export_srt = col_f3.checkbox(".srt", value=False, key="file_export_srt")
+
     if not uploaded:
         return
 
@@ -121,17 +128,28 @@ def _display_results(segments: list, has_translation: bool):
         for seg in segments:
             render_segment(seg)
 
-    _export_section(segments)
+    _export_section(
+        segments,
+        export_txt=st.session_state.get("file_export_txt", True),
+        export_md=st.session_state.get("file_export_md", False),
+        export_srt=st.session_state.get("file_export_srt", False),
+    )
 
 
-def _export_section(segments: list):
+def _export_section(segments: list, export_txt=None, export_md=None, export_srt=None):
     st.divider()
     st.subheader("Export")
 
-    col1, col2, col3 = st.columns(3)
-    export_txt = col1.checkbox(".txt", value=True)
-    export_md  = col2.checkbox(".md",  value=False)
-    export_srt = col3.checkbox(".srt", value=False)
+    # Si les formats ne sont pas pré-choisis (onglet fichier), afficher les checkboxes
+    if export_txt is None:
+        col1, col2, col3 = st.columns(3)
+        export_txt = col1.checkbox(".txt", value=True)
+        export_md  = col2.checkbox(".md",  value=False)
+        export_srt = col3.checkbox(".srt", value=False)
+    else:
+        # Rappel visuel des formats sélectionnés
+        formats = [f for f, v in [(".txt", export_txt), (".md", export_md), (".srt", export_srt)] if v]
+        st.caption(f"Formats sélectionnés : {', '.join(formats) if formats else 'aucun'}")
 
     source_name = st.session_state.get("file_source_name", "transcription")
     base_name = os.path.splitext(source_name)[0]
