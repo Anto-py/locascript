@@ -1,14 +1,18 @@
 import os
 import json
 import queue
+import subprocess
+import sys
 import time
 import tempfile
+import pathlib
 import streamlit as st
 
 LIVE_STATE_FILE = "/tmp/locascript_live.json"
+PROJECT_ROOT = str(pathlib.Path(__file__).parent.parent)
 
 from core.audio_capture import list_devices, AudioCaptureSession
-from core.transcriber import MODELS, transcribe
+from core.transcriber import MODELS
 from core.translator import translate
 from ui.theme import format_timestamp
 from ui.file_tab import _export_section
@@ -147,7 +151,15 @@ def _process_audio_queue(audio_q, model_name, chunk_seconds, translate_to_lang, 
             tmp.write(wav_bytes)
             tmp_path = tmp.name
         try:
-            segs = transcribe(tmp_path, model_name=model_name, language=source_lang)
+            result = subprocess.run(
+                [sys.executable, "-m", "core.transcribe_worker",
+                 tmp_path, model_name, str(source_lang)],
+                capture_output=True, text=True, cwd=PROJECT_ROOT,
+            )
+            if result.returncode != 0:
+                st.session_state["live_last_error"] = result.stderr[-300:] or "Erreur subprocess"
+                continue
+            segs = json.loads(result.stdout)
             offset = time.time() - start_time
             for seg in segs:
                 if translate_to_lang:
