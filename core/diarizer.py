@@ -26,6 +26,22 @@ def load_diarizer():
     return _pipeline
 
 
+def _to_16k_wav(audio_path: str) -> str:
+    """Convertit l'audio en WAV 16kHz mono via torchaudio — requis par pyannote."""
+    import tempfile
+    import torchaudio
+
+    waveform, sr = torchaudio.load(audio_path)
+    if waveform.shape[0] > 1:
+        waveform = waveform.mean(dim=0, keepdim=True)
+    if sr != 16000:
+        waveform = torchaudio.functional.resample(waveform, sr, 16000)
+
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
+    torchaudio.save(tmp.name, waveform, 16000)
+    return tmp.name
+
+
 def diarize(audio_path: str, pipeline=None) -> list[dict]:
     """
     Identifie les locuteurs dans un fichier audio.
@@ -36,7 +52,12 @@ def diarize(audio_path: str, pipeline=None) -> list[dict]:
     if pipeline is None:
         pipeline = load_diarizer()
 
-    diarization = pipeline(audio_path)
+    converted_path = _to_16k_wav(audio_path)
+    try:
+        diarization = pipeline(converted_path)
+    finally:
+        os.unlink(converted_path)
+
     segments = []
     for turn, _, speaker in diarization.itertracks(yield_label=True):
         segments.append({
