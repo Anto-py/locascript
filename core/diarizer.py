@@ -54,12 +54,15 @@ def diarize(audio_path: str, pipeline=None) -> list[dict]:
 
     converted_path = _to_16k_wav(audio_path)
     try:
-        diarization = pipeline(converted_path)
+        result = pipeline(converted_path)
     finally:
         os.unlink(converted_path)
 
+    # Compatibilité pyannote 3.x : DiarizeOutput ou Annotation
+    annotation = result.annotation if hasattr(result, "annotation") else result
+
     segments = []
-    for turn, _, speaker in diarization.itertracks(yield_label=True):
+    for turn, _, speaker in annotation.itertracks(yield_label=True):
         segments.append({
             "speaker": speaker,
             "start":   turn.start,
