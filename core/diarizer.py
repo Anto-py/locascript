@@ -58,8 +58,11 @@ def diarize(audio_path: str, pipeline=None) -> list[dict]:
     finally:
         os.unlink(converted_path)
 
-    # Compatibilité pyannote 3.x : DiarizeOutput ou Annotation
-    annotation = result.annotation if hasattr(result, "annotation") else result
+    # Compatibilité pyannote 3.x : DiarizeOutput.speaker_diarization ou Annotation directe
+    if hasattr(result, "speaker_diarization"):
+        annotation = result.speaker_diarization
+    else:
+        annotation = result
 
     segments = []
     for turn, _, speaker in annotation.itertracks(yield_label=True):

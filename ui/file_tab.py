@@ -111,28 +111,68 @@ def _process(uploaded, model_name, language, use_diarization,
     _display_results(segments, translate_to_en or bool(translate_to_lang))
 
 
+def _group_by_speaker(segments: list) -> list:
+    """Regroupe les segments consécutifs du même locuteur."""
+    if not segments:
+        return []
+    groups = []
+    current = [segments[0]]
+    for seg in segments[1:]:
+        if seg.get("speaker") == current[-1].get("speaker"):
+            current.append(seg)
+        else:
+            groups.append(current)
+            current = [seg]
+    groups.append(current)
+    return groups
+
+
 def _display_results(segments: list, has_translation: bool):
     st.subheader("Transcription")
+    from ui.theme import speaker_color, format_timestamp
+
+    groups = _group_by_speaker(segments)
 
     if has_translation:
         col_orig, col_trad = st.columns(2)
         col_orig.markdown("**Original**")
         col_trad.markdown("**Traduction**")
-        for seg in segments:
-            with col_orig:
-                render_segment(seg)
-            with col_trad:
-                trad_seg = {**seg, "text": seg.get("translation", ""), "speaker": ""}
-                render_segment(trad_seg)
+        for group in groups:
+            speaker = group[0].get("speaker", "")
+            ts = format_timestamp(group[0].get("start", 0))
+            text = " ".join(s.get("text", "").strip() for s in group)
+            trad = " ".join(s.get("translation", "").strip() for s in group)
+            _render_speaker_block(ts, speaker, text, col_orig)
+            _render_speaker_block(ts, "", trad, col_trad)
     else:
-        for seg in segments:
-            render_segment(seg)
+        for group in groups:
+            speaker = group[0].get("speaker", "")
+            ts = format_timestamp(group[0].get("start", 0))
+            text = " ".join(s.get("text", "").strip() for s in group)
+            _render_speaker_block(ts, speaker, text)
 
     _export_section(
         segments,
         export_txt=st.session_state.get("file_export_txt", True),
         export_md=st.session_state.get("file_export_md", False),
         export_srt=st.session_state.get("file_export_srt", False),
+    )
+
+
+def _render_speaker_block(ts: str, speaker: str, text: str, container=None):
+    from ui.theme import speaker_color
+    target = container or st
+
+    if speaker and speaker != "?":
+        color, emoji = speaker_color(speaker)
+        label = f'<span style="color:{color};font-weight:700">{emoji} {speaker.upper()}</span>'
+    else:
+        label = ""
+
+    ts_html = f'<span class="timestamp">[{ts}]</span>'
+    target.markdown(
+        f'<div class="transcript-segment">{ts_html} {label} {text}</div>',
+        unsafe_allow_html=True,
     )
 
 

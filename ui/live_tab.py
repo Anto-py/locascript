@@ -48,7 +48,7 @@ def render():
         st.markdown(
             '<div style="text-align:right;padding-top:1rem">'
             '<a href="http://localhost:8502" target="_blank" '
-            'style="color:#E4632E;font-weight:700;text-decoration:none">'
+            'style="color:#AD4117;font-weight:700;text-decoration:none">'
             '🖥️ Fenêtre d\'affichage</a></div>',
             unsafe_allow_html=True,
         )
@@ -108,7 +108,7 @@ def render():
         if st.session_state["live_running"]:
             elapsed = int(time.time() - (st.session_state["live_start_time"] or time.time()))
             st.markdown(
-                f'<span style="color:#E4632E;font-weight:700">'
+                f'<span style="color:#AD4117;font-weight:700">'
                 f'● ENREGISTREMENT — {elapsed}s</span>',
                 unsafe_allow_html=True
             )
@@ -125,7 +125,8 @@ def render():
         if audio_q and not audio_q.empty():
             with st.spinner("Transcription en cours…"):
                 _process_audio_queue(audio_q, model_name, chunk_seconds, translate_to_lang, source_lang_code)
-            _write_live_state(translate_to_lang is not None)
+        # Toujours synchroniser la fenêtre d'affichage à chaque rerun
+        _write_live_state(translate_to_lang is not None)
 
     # Zone de transcription live
     st.divider()
@@ -135,7 +136,7 @@ def render():
     # Export après arrêt (utilise les formats choisis avant le démarrage)
     if not st.session_state["live_running"] and st.session_state["live_segments"]:
         st.divider()
-        _export_section(
+        _live_export_section(
             st.session_state["live_segments"],
             export_txt=st.session_state.get("live_export_txt", True),
             export_md=st.session_state.get("live_export_md", False),
@@ -205,12 +206,22 @@ def _start(device_index, chunk_seconds, source_lang_code=None, channels=1):
 
 
 def _write_live_state(has_translation: bool):
-    """Écrit les segments courants dans un fichier JSON pour la fenêtre d'affichage."""
+    """Écrit les groupes de segments dans un fichier JSON pour la fenêtre d'affichage."""
     segments = st.session_state.get("live_segments", [])
+    groups = _group_segments(segments[-100:])
+
+    serialized = []
+    for group in groups:
+        ts = max(0, group[0].get("start", 0))
+        if has_translation:
+            text = " ".join(s.get("translation", s.get("text", "")).strip() for s in group)
+        else:
+            text = " ".join(s.get("text", "").strip() for s in group)
+        serialized.append({"start": ts, "text": text})
+
     data = {
         "running": st.session_state.get("live_running", False),
-        "has_translation": has_translation,
-        "segments": segments[-50:],
+        "groups": serialized,
     }
     with open(LIVE_STATE_FILE, "w") as f:
         json.dump(data, f)
@@ -224,6 +235,18 @@ def _stop():
         st.session_state["live_session"] = None
 
 
+def _group_segments(segments, gap=1.0):
+    """Regroupe les segments consécutifs séparés par moins de `gap` secondes."""
+    if not segments:
+        return []
+    groups = [[segments[0]]]
+    for seg in segments[1:]:
+        if seg.get("start", 0) - groups[-1][-1].get("end", 0) > gap:
+            groups.append([])
+        groups[-1].append(seg)
+    return groups
+
+
 def _render_live_transcript(placeholder):
     segments = st.session_state.get("live_segments", [])
     if not segments:
@@ -231,17 +254,64 @@ def _render_live_transcript(placeholder):
         return
 
     has_translation = any("translation" in s for s in segments)
-    lines = []
+    groups = _group_segments(segments[-100:])
+    paragraphs = []
 
-    for seg in segments[-50:]:
-        ts = format_timestamp(max(0, seg.get("start", 0)))
-        text = seg.get("text", "").strip()
-        trad = seg.get("translation", "")
-
-        if has_translation and trad:
-            line = f"**[{ts}]** {trad}"
+    for group in groups:
+        if has_translation:
+            text = " ".join(s.get("translation", s.get("text", "")).strip() for s in group)
         else:
-            line = f"**[{ts}]** {text}"
-        lines.append(line)
+            text = " ".join(s.get("text", "").strip() for s in group)
+        if text.strip():
+            paragraphs.append(text.strip())
 
-    placeholder.markdown("\n\n".join(lines))
+    placeholder.markdown("\n\n".join(paragraphs))
+
+
+def _live_export_section(segments, export_txt=True, export_md=False, export_srt=False):
+    """Export live — sans timestamps, paragraphes séparés par les silences > 1s."""
+    import datetime
+    st.subheader("Export")
+
+    has_translation = any("translation" in s for s in segments)
+    groups = _group_segments(segments)
+    now = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    formats = [f for f, v in [(".txt", export_txt), (".md", export_md), (".srt", export_srt)] if v]
+    st.caption(f"Formats sélectionnés : {', '.join(formats) if formats else 'aucun'}")
+
+    def group_text(group):
+        if has_translation:
+            return " ".join(s.get("translation", s.get("text", "")).strip() for s in group)
+        return " ".join(s.get("text", "").strip() for s in group)
+
+    if export_txt:
+        lines = [group_text(g) for g in groups if group_text(g).strip()]
+        content = "\n\n".join(lines)
+        st.download_button("Télécharger .txt", data=content,
+                           file_name=f"live_{now}.txt", mime="text/plain")
+
+    if export_md:
+        date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+        header = f"# Transcription en direct — {date}\n\n---\n\n"
+        lines = [group_text(g) for g in groups if group_text(g).strip()]
+        content = header + "\n\n".join(lines)
+        st.download_button("Télécharger .md", data=content,
+                           file_name=f"live_{now}.md", mime="text/markdown")
+
+    if export_srt:
+        def srt_time(s):
+            h, m = int(s // 3600), int((s % 3600) // 60)
+            sec, ms = int(s % 60), int((s % 1) * 1000)
+            return f"{h:02d}:{m:02d}:{sec:02d},{ms:03d}"
+        srt_lines = []
+        for i, group in enumerate(groups, 1):
+            text = group_text(group).strip()
+            if not text:
+                continue
+            start = srt_time(max(0, group[0].get("start", 0)))
+            end   = srt_time(max(0, group[-1].get("end", 0)))
+            srt_lines.append(f"{i}\n{start} --> {end}\n{text}\n")
+        content = "\n".join(srt_lines)
+        st.download_button("Télécharger .srt", data=content,
+                           file_name=f"live_{now}.srt", mime="text/plain")

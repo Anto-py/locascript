@@ -137,6 +137,21 @@ Les modèles sont téléchargés automatiquement au premier lancement. Prévoir 
 
 ---
 
+## Interface
+
+Locascript utilise un thème **rétrofuturiste** (palette encre / papier / teal / orange) avec une typographie Oswald.
+
+### Fenêtre d'affichage dédiée
+
+Une seconde fenêtre (`localhost:8502`) affiche la transcription en grand format, idéale pour :
+- Se placer à côté d'un PowerPoint en présentation
+- Afficher les sous-titres sur un second écran
+- Projeter la transcription pour un public
+
+Elle se lance automatiquement au démarrage de l'app principale.
+
+---
+
 ## Stack technique
 
 - **[mlx-whisper](https://github.com/ml-explore/mlx-examples)** — transcription optimisée Apple Silicon

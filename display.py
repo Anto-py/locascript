@@ -15,17 +15,12 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# CSS plein écran, responsive, texte centré
 st.markdown("""
 <style>
-/* Masquer tout le chrome Streamlit */
-#MainMenu, header, footer, .stDeployButton { display: none !important; }
-.stAppDeployButton { display: none !important; }
+#MainMenu, header, footer, .stDeployButton, .stAppDeployButton { display: none !important; }
 
-/* Fond noir, texte blanc large */
-.stApp {
-    background: #0D1617 !important;
-}
+.stApp { background: #0D1617 !important; }
+
 .block-container {
     padding: 2rem 3rem !important;
     max-width: 100% !important;
@@ -33,26 +28,32 @@ st.markdown("""
     border: none !important;
 }
 
-/* Zone de texte principale */
-#transcript-box {
-    font-family: 'Inter', system-ui, sans-serif;
-    font-size: clamp(1.4rem, 3vw, 2.8rem);
-    line-height: 1.6;
-    color: #F2EFE6;
-    word-wrap: break-word;
-}
-
-/* Indicateur enregistrement */
 #rec-indicator {
-    font-size: 0.9rem;
-    color: #E4632E;
+    font-size: 0.85rem;
     font-weight: 700;
     letter-spacing: 0.1em;
-    margin-bottom: 1.5rem;
     text-transform: uppercase;
+    margin-bottom: 1.5rem;
+    color: #E4632E;
 }
-#rec-indicator.stopped {
-    color: #127676;
+#rec-indicator.stopped { color: #F2EFE6; }
+
+.transcript-block {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: clamp(1.2rem, 2.5vw, 2.4rem);
+    line-height: 1.7;
+    color: rgba(242, 239, 230, 0.65);
+    display: block;
+    margin-bottom: 1.4em;   /* ligne vide entre groupes */
+}
+
+.transcript-block.latest {
+    color: #F2EFE6;
+    background: rgba(228, 99, 46, 0.15);
+    border-left: 4px solid #E4632E;
+    padding: 0.2em 0.6em;
+    border-radius: 4px;
+    margin-bottom: 1.4em;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -73,13 +74,12 @@ state = load_state()
 if state is None:
     st.markdown(
         '<div id="rec-indicator" class="stopped">○ EN ATTENTE</div>'
-        '<div id="transcript-box" style="color:#127676">En attente de la transcription…</div>',
+        '<div class="transcript-block">En attente de la transcription…</div>',
         unsafe_allow_html=True,
     )
 else:
     running = state.get("running", False)
-    segments = state.get("segments", [])
-    has_translation = state.get("has_translation", False)
+    groups = state.get("groups", [])
 
     indicator = (
         '<div id="rec-indicator">● ENREGISTREMENT EN COURS</div>'
@@ -87,20 +87,20 @@ else:
         '<div id="rec-indicator" class="stopped">○ ARRÊTÉ</div>'
     )
 
-    lines = []
-    for seg in segments:
-        text = seg.get("translation", "").strip() if has_translation else seg.get("text", "").strip()
-        if text:
-            lines.append(text)
+    if not groups:
+        body = '<div class="transcript-block">En attente de la parole…</div>'
+    else:
+        parts = []
+        for i, group in enumerate(groups):
+            text = group.get("text", "").strip()
+            if not text:
+                continue
+            is_last = (i == len(groups) - 1)
+            cls = "transcript-block latest" if is_last else "transcript-block"
+            parts.append(f'<div class="{cls}">{text}</div>')
+        body = "\n".join(parts)
 
-    # Afficher les 5 dernières lignes pour rester lisible
-    display_text = "<br><br>".join(lines[-5:]) if lines else "…"
+    st.markdown(f"{indicator}{body}", unsafe_allow_html=True)
 
-    st.markdown(
-        f'{indicator}<div id="transcript-box">{display_text}</div>',
-        unsafe_allow_html=True,
-    )
-
-# Auto-refresh toutes les secondes
 time.sleep(1)
 st.rerun()
